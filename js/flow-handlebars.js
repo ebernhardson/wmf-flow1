@@ -93,7 +93,7 @@
 				"Suppress": "Suppress",
 
 				"started_with_participants": function ( context, options ) {
-					var author = FlowHandlebars.prototype.authorBlock( context, options );
+					var author = context.author;
 					return author.name + " started this topic"
 						+ ( context.author_count > 1 ? (
 						", with " + ( context.author_count - 1 ) + " other participant"
@@ -101,10 +101,10 @@
 						) : '' );
 				},
 				"topic_count_sidebar": function ( context, options ) {
-					return "Showing " + context.topics.length + " of " + context.topic_count + " topics attached to this page";
+					return "Showing " + context.roots.length + " of " + context.topic_count + " topics attached to this page";
 				},
 				"Reply_to_author_name": function ( context, options ) {
-					return "Reply to " + FlowHandlebars.prototype.authorBlock( context, options ).name;
+					return "Reply to " + context.author.name;
 				},
 				"comment_count": function ( context, options ) {
 					return context.reply_count + " comment" + ( !context.reply_count || context.reply_count > 1 ? 's' : '' )
@@ -176,6 +176,21 @@
 	Handlebars.registerHelper( 'l10n', FlowHandlebars.prototype.l10n );
 
 	/**
+	 * @example {{uuidTimestamp uuid "started_ago"}}
+	 * @param {String} uuid
+	 * @param {String} str
+	 * @param {bool} [timeAgoOnly]
+	 * @returns {String|undefined}
+	 */
+	FlowHandlebars.prototype.uuidTimestamp = function( uuid, str, timeAgoOnly ) {
+		var timestamp = parseInt( parseInt( uuid, 36 ).toString( 2 ).substr( 0, 41 ), 2 );
+		return FlowHandlebars.prototype.timestamp( timestamp, str, timeAgoOnly );
+	};
+
+	// Register uuidTimestamp
+	Handlebars.registerHelper( 'uuidTimestamp', FlowHandlebars.prototype.uuidTimestamp );
+
+	/**
 	 * Generates markup for an "nnn sssss ago" and date/time string.
 	 * @example {{timestamp start_time "started_ago"}}
 	 * @param {int} timestamp
@@ -184,14 +199,15 @@
 	 * @returns {String|undefined}
 	 */
 	FlowHandlebars.prototype.timestamp = function ( timestamp, str, timeAgoOnly ) {
-		if ( isNaN( timestamp ) || !str ) {
+		if ( !timestamp || !str ) {
 			mw.flow.debug( '[timestamp] Invalid arguments', arguments);
 			return;
 		}
 
-		var seconds_ago = ( +new Date() - timestamp ) / 1000,
-			time_ago;
+		var time_ago,
+		    seconds_ago = ( +new Date() - timestamp ) / 1000;
 
+		// 
 		if ( seconds_ago < 2419200 ) {
 			// Return "n ago" for only dates less than 4 weeks ago
 			time_ago = FlowHandlebars.prototype.l10n( str, seconds_ago );
@@ -205,11 +221,8 @@
 			return;
 		}
 
-		// Generate a GUID for this element to find it later
-		var guid = FlowHandlebars.prototype.generateUID();
-
 		// Store this in the timestamps auto-updater array
-		_timestamp.list.push( { guid: guid, timestamp: timestamp, str: str, failcount: 0 } );
+		_timestamp.list.push( { guid: null, timestamp: timestamp, str: str, failcount: 0 } );
 
 		// Render the timestamp template
 		return FlowHandlebars.prototype.html(
@@ -219,7 +232,7 @@
 					time_iso: timestamp,
 					time_readable: FlowHandlebars.prototype.l10n( 'datetime', timestamp ),
 					time_ago: time_ago,
-					guid: guid
+					guid: null, 
 				}
 			)
 		);
@@ -277,7 +290,7 @@
 				// Only touch the DOM if the text has actually changed
 				if ( $ago.text() !== text ) {
 					$ago.text( text );
-				}
+d			ngs }
 			}
 		}
 
@@ -314,22 +327,57 @@
 	Handlebars.registerHelper( 'html', FlowHandlebars.prototype.html );
 
 	/**
-	 * Returns the workflow context using the given context/argument (a string uuid).
-	 * @example {{#each topics}}{{#workflow this}}{{content}}{{/workflow}}{{/each}}
-	 * @param {String} context
-	 * @param {Object} options
-	 * @returns {String}
+	 * Render a block instance. Used as a Handlebars helper.
+	 * @example {#each blocks}}{{block this}}{{/each}}
+	 * @param {Object} context
+	 * @returns {String|Handlebars.SafeString}
 	 */
-	FlowHandlebars.prototype.workflowBlock = function ( context, options ) {
-		var workflow = options.data.root.workflows[ context ] || { content: null };
-		if ( workflow.id === undefined ) {
-			workflow.id = context;
-		}
-		return options.fn ? options.fn( workflow ) : workflow;
+	FlowHandlebars.prototype.block = function( block ) {
+		var template = FlowHandlebars.prototype.getTemplate( "flow_block_" +block.type );
+		return new Handlebars.SafeString(template(block));
 	};
 
-	// Register html
-	Handlebars.registerHelper( 'workflow', FlowHandlebars.prototype.workflowBlock );
+	// Register block
+	Handlebars.registerHelper( 'block', FlowHandlebars.prototype.block );
+
+	/** 
+	 * Accept a list of revisionIds and iterate their associated revision 
+	 * @example {#eachPost this roots #}...{{/eachPost}}
+	 * @param {Object} topic or topiclist api result
+	 * @param {Array} list of post id's to iterate
+	 * @parma {Object} handlebars invocation options
+	 * @return {String}
+	 */
+	FlowHandlebars.prototype.eachPost = function( context, postIds, options ) {
+		var revId, data, i,
+			fn = options.fn,
+			ret = "";
+
+		if ( postIds.length === 0 ) {
+			options.inverse( this );
+		} else {
+			if ( options.data ) {
+				data = Handlebars.createFrame( options.data );
+			}
+
+			for ( i = 0; i < postIds.length; i++ ) {
+				if ( data ) {
+					data.index = i;
+					data.first = ( i === 0 );
+					data.last = ( i === ( postIds.length - 1 ) );
+				}
+				// top revision available for specified postId
+				// @todo more carefully
+				revId = context.posts[postIds[i]][0];
+				ret = ret + fn( context.revisions[revId], { data: data } );
+			}
+		}
+
+		return ret;
+	};
+
+	// Register eachPost
+	Handlebars.registerHelper( 'eachPost', FlowHandlebars.prototype.eachPost );
 
 	/**
 	 * Returns the author context using the current context's author_id key.
@@ -339,6 +387,8 @@
 	 * @returns {String}
 	 */
 	FlowHandlebars.prototype.authorBlock = function ( context, options ) {
+		return "@todo";
+
 		var author = options.data.root.authors[ context.author_id ] || { name: 'error', gender: null, wiki: null };
 		return options.fn ? options.fn( author ) : author;
 	};

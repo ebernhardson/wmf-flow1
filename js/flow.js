@@ -96,9 +96,20 @@
 	 * @todo not like this
 	 */
 	$( document ).ready( function () {
-		$( mw.flow.TemplateEngine.processTemplate( 'flow_board', mockData ) ).insertBefore( '#flow_board-partial' );
+		// temporary hack
+		var url = 'http://localhost:8080/w/api.php?action=query&format=json&list=flow&flowpage=User%20talk:Zomg&flowworkflow=rjs32phpef9bk5qg';
 
-		mw.flow.initComponent( $( '.flow-component' ) );
+		$.ajax( {
+			dataType: "json",
+			url: url,
+			success: function( data, textStatus, jqXHR ) {
+
+				$( mw.flow.TemplateEngine.processTemplate( 'flow_board', data.query.flow ) )
+					.insertBefore( '#flow_board-partial' );
+
+				mw.flow.initComponent( $( '.flow-component' ) );
+			}
+		} );
 	} );
 }( jQuery ) );
 

@@ -59,19 +59,40 @@
 
 				<!-- START OF TEMPLATES -->
 
-				<script type="text/x-handlebars-template" id="flow_board_header-partial">
+				<script type="text/x-handlebars-template" id="flow_block_header-partial">
 					<div class="flow-board-header">
-						{{#workflow board}}
-							{{#with header}}
-								{{#if content}}
-									{{html content}}
-								{{else}}
-									<p>{{l10n "No_header"}}</p>
-								{{/if}}
-							{{/with}}
-						{{/workflow}}
+						{{#with revision}}
+							{{#if content}}
+								{{html content}}
+							{{else}}
+								<p>{{l10n "No_header"}}</p>
+							{{/if}}
+						{{/with}}
 						<div class="flow-board-header-nav">
 							<a class="flow-ui-button flow-ui-progressive flow-ui-quiet flow-board-header-icon" href="/" title="{{l10n "Edit"}}"><span class="wikicon wikicon-pencil"></span></a>
+						</div>
+					</div>
+				</script>
+
+				<script type="text/x-handlebars-template" id="flow_block_topiclist-partial">
+					{{> flow_board_navigation this}}
+
+					<div class="flow-board">
+						{{> flow_topic_navigation this}}
+						{{> flow_newtopic_form this}}
+
+						<div class="flow-topics">
+							{{#eachPost this roots}}
+								{{> flow_topic this }}
+							{{/eachPost}}
+						</div>
+					</div>
+				</script>
+
+				<script type="text/x-handlebars-template" id="flow_block_topic-partial">
+					<div class="flow_board">
+						<div class="flow-topics">
+							@todo
 						</div>
 					</div>
 				</script>
@@ -94,18 +115,15 @@
 
 				<script type="text/x-handlebars-template" id="flow_topic_navigation-partial">
 					<ul class="flow-topic-navigation">
-						{{#workflow board}}
-							<li class="flow-topic-navigation-heading"><h5>{{l10n "Topics_n" topics.length}}</h5></li>
-							{{#each topics}}
-								{{#workflow this}}
-									<li class="flow-topic-navigator-wrap"><a href="#flow-topic-{{id}}" class="flow-topic-navigator">{{math @index "+" 1}}. {{html content}} <span class="flow-topic-navigator-meta">{{#if update_time}}{{timestamp update_time "active_ago"}}{{else}}{{timestamp start_time "started_ago"}}{{/if}}</span></a></li>
-								{{/workflow}}
-							{{/each}}
-							<li class="flow-topic-navigation-footer">
-								{{l10n "topic_count_sidebar" this}}
-								<a href="{{urls.pagination.load_more}}" class="flow-ui-button flow-ui-progressive flow-ui-quiet flow-ui-thin"><span class="wikicon wikicon-article"></span> {{l10n "Load_More"}}</a>
-							</li>
-						{{/workflow}}
+
+						<li class="flow-topic-navigation-heading"><h5>{{l10n "Topics_n" roots.length}}</h5></li>
+						{{#eachPost this roots}}
+							<li class="flow-topic-navigator-wrap"><a href="#flow-topic-{{id}}" class="flow-topic-navigator">{{math @index "+" 1}}. {{html content}} <span class="flow-topic-navigator-meta">{{#if last_updated}}{{timestamp last_updated "active_ago"}}{{else}}{{uuidTimestamp revisionId "started_ago"}}{{/if}}</span></a></li>
+						{{/eachPost}}
+						<li class="flow-topic-navigation-footer">
+							{{l10n "topic_count_sidebar" this}}
+							<a href="{{urls.pagination.load_more}}" class="flow-ui-button flow-ui-progressive flow-ui-quiet flow-ui-thin"><span class="wikicon wikicon-article"></span> {{l10n "Load_More"}}</a>
+						</li>
 					</ul>
 				</script>
 
@@ -150,17 +168,17 @@
 				</script>
 
 				<script type="text/x-handlebars-template" id="flow_topic-partial">
-					<div class="flow-topic" id="flow-topic-{{id}}">
+					<div class="flow-topic" id="flow-topic-{{postId}}">
 						<div class="flow-topic-titlebar">
 							<h2 class="flow-topic-title">{{content}}</h2>
 							<span class="flow-author">{{l10n "started_with_participants" this}}</span>
 							<div class="flow-topic-meta">
 								<a class="flow-ui-button flow-ui-progressive flow-ui-sleeper flow-ui-thin" href="#flow-topic-{{id}}-form-content">{{l10n "Reply"}}</a>
 								<span class="flow-ui-buttonspacer">{{l10n "comment_count" this}}</span>
-								{{#if update_time}}
-									<span class="wikicon wikicon-speech-bubbles"></span> {{timestamp update_time "active_ago"}}
+								{{#if last_updated}}
+									<span class="wikicon wikicon-speech-bubbles"></span> {{timestamp last_updated "active_ago"}}
 								{{else}}
-									<span class="wikicon wikicon-speech-bubble"></span> {{timestamp start_time "started_ago"}}
+									<span class="wikicon wikicon-speech-bubble"></span> {{uuidTimestamp revisionId "started_ago"}}
 								{{/if}}
 							</div>
 
@@ -175,11 +193,9 @@
 							</div>
 						</div>
 
-						{{#each replies}}
-							{{#workflow this}}
-								{{> flow_post this}}
-							{{/workflow}}
-						{{/each}}
+						{{#eachPost @root replies}}
+							{{> flow_post this}}
+						{{/eachPost}}
 
 						{{> flow_reply_form this}}
 					</div>
@@ -187,9 +203,9 @@
 
 				<script type="text/x-handlebars-template" id="flow_post-partial">
 					<div class="flow-post">
-						{{#author this}}
+						{{#with author}}
 							<span class="flow-author"><a href="{{urls.author_contribs}}" title="{{urls.author_contribs_title}}" class="mw-userlink">{{name}}</a> <span class="mw-usertoollinks">(<a href="{{urls.author_talk}}" class="new" title="{{urls.author_talk_title}}">{{l10n "Talk"}}</a> | <a href="{{urls.author_block}}" title="{{urls.author_block_title}}">{{l10n "block"}}</a>)</span></span>
-						{{/author}}
+						{{/with}}
 						<div class="flow-post-content">
 							{{html content}}
 						</div>
@@ -199,11 +215,11 @@
 								&#8226;
 								<a href="{{urls.edit}}">{{l10n "Edit"}}</a>
 							</span>
-							{{#if update_time}}
-								<span class="wikicon wikicon-clock"></span> {{timestamp update_time "edited_ago"}}
+							{{#if previousRevisionId}}
+								<span class="wikicon wikicon-clock"></span> {{uuidTimestamp revisionId "edited_ago"}}
 								&#8226;
 							{{/if}}
-							{{timestamp start_time "time_ago"}}
+							{{uuidTimestamp postId "time_ago"}}
 						</div>
 
 						<div class="flow-menu">
@@ -215,11 +231,9 @@
 							</ul>
 						</div>
 
-						{{#each replies}}
-							{{#workflow this}}
-								{{> flow_post this}}
-							{{/workflow}}
-						{{/each}}
+						{{#eachPost @root replies}}
+							{{> flow_post this}}
+						{{/eachPost}}
 					</div>
 				</script>
 
@@ -252,27 +266,16 @@
 
 				<!-- START PAGE -->
 
-				<script type="text/x-handlebars-template" id="flow_board-partial">
-					<div class="flow-component" data-flow-component="board" data-flow-id="{{#workflow board}}{{id}}{{/workflow}}">
-						{{> flow_board_header this}}
+				<script type="text/x-handlebars-template" id="block_topiclist">
+				</script>
 
-						{{> flow_board_navigation this}}
+				<script type="text/x-handlebars-template" id="flow_board-partial">
+					<div class="flow-component" data-flow-component="board" data-flow-id="{{workflow}}">
+						{{#each blocks}}
+							{{block this}}
+						{{/each}}
 
 						<div class="flow-board">
-							{{> flow_topic_navigation this}}
-
-							{{> flow_newtopic_form this}}
-
-							<div class="flow-topics">
-								{{#workflow board}}
-									{{#each topics}}
-										{{#workflow this}}
-											{{> flow_topic this}}
-										{{/workflow}}
-									{{/each}}
-								{{/workflow}}
-							</div>
-
 							<p>Wikicons: <span class="wikicon wikicon-magnifying-glass"></span><span class="wikicon wikicon-arrow-left"></span><span class="wikicon wikicon-tick"></span><span class="wikicon wikicon-x"></span><span class="wikicon wikicon-x-circle"></span><span class="wikicon wikicon-translate"></span><span class="wikicon wikicon-move"></span><span class="wikicon wikicon-puzzle"></span><span class="wikicon wikicon-envelope"></span><span class="wikicon wikicon-dice"></span><span class="wikicon wikicon-bookmark"></span><span class="wikicon wikicon-article"></span><span class="wikicon wikicon-pin"></span><span class="wikicon wikicon-gear"></span><span class="wikicon wikicon-ellipsis"></span><span class="wikicon wikicon-printer"></span><span class="wikicon wikicon-lock"></span><span class="wikicon wikicon-clock"></span><span class="wikicon wikicon-unstar"></span><span class="wikicon wikicon-star"></span><span class="wikicon wikicon-wikitrail"></span><span class="wikicon wikicon-eye"></span><span class="wikicon wikicon-eye-lid"></span><span class="wikicon wikicon-funnel"></span><span class="wikicon wikicon-expanded"></span><span class="wikicon wikicon-toc"></span><span class="wikicon wikicon-compact"></span><span class="wikicon wikicon-flag"></span><span class="wikicon wikicon-flag-slash"></span><span class="wikicon wikicon-trash"></span><span class="wikicon wikicon-trash-slash"></span><span class="wikicon wikicon-block"></span><span class="wikicon wikicon-block-slash"></span><span class="wikicon wikicon-stop"></span><span class="wikicon wikicon-play"></span><span class="wikicon wikicon-pencil"></span><span class="wikicon wikicon-pencil-lock"></span><span class="wikicon wikicon-pencil-revert"></span><span class="wikicon wikicon-speech-bubble"></span><span class="wikicon wikicon-speech-bubbles"></span><span class="wikicon wikicon-speech-bubble-add"></span><span class="wikicon wikicon-speech-bubble-smile"></span><span class="wikicon wikicon-user-smile"></span><span class="wikicon wikicon-user-sleep"></span><span class="wikicon wikicon-quotes"></span><span class="wikicon wikicon-quotes-add"></span><span class="wikicon wikicon-image-add"></span><span class="wikicon wikicon-image"></span><span class="wikicon wikicon-image-lock"></span><span class="wikicon wikicon-folder"></span><span class="wikicon wikicon-image-placeholder"></span><span class="wikicon wikicon-folder-placeholder"></span></p>
 
 							<p>Links: <a href="#" class="flow-ui-progressive">Progressive</a> <a href="#" class="flow-ui-regressive">Regressive</a> <a href="#" class="flow-ui-constructive">Constructive</a> <a href="#" class="flow-ui-destructive">Destructive</a></p>
